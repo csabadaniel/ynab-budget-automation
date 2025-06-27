@@ -1,5 +1,7 @@
 import * as ynab from 'ynab';
 import * as dotenv from 'dotenv';
+import * as fs from 'fs';
+import * as path from 'path';
 
 // Load environment variables
 dotenv.config();
@@ -87,7 +89,7 @@ class YNABAutomation {
   }
 
   /**
-   * Example automation: Log budget summary
+   * Save budget summary to JSON file
    */
   async logBudgetSummary(): Promise<void> {
     try {
@@ -95,39 +97,184 @@ class YNABAutomation {
 
       // Get budgets
       const budgets = await this.getBudgets();
-      console.log(`📊 Found ${budgets.length} budget(s):`);
-      budgets.forEach(budget => {
-        console.log(`  - ${budget.name} (${budget.id})`);
-      });
-      console.log();
+      console.log(`📊 Found ${budgets.length} budget(s)`);
 
-      // If we have a specific budget ID, get details
+      const budgetData: any = {
+        timestamp: new Date().toISOString(),
+        budgets: budgets.map(budget => ({
+          id: budget.id,
+          name: budget.name,
+          last_modified_on: budget.last_modified_on,
+          first_month: budget.first_month,
+          last_month: budget.last_month
+        }))
+      };
+
+      // If we have a specific budget ID, get detailed data
       if (this.budgetId) {
-        const budgetDetails = await this.getBudgetDetails();
-        console.log(`💰 Budget: ${budgetDetails.name}`);
-        console.log(`📅 Last Modified: ${budgetDetails.last_modified_on}`);
+        console.log(`💰 Getting details for budget: ${this.budgetId}`);
         
-        // Get accounts
+        const budgetDetails = await this.getBudgetDetails();
         const accounts = await this.getAccounts();
-        console.log(`\n🏦 Accounts (${accounts.length}):`);
-        accounts.forEach(account => {
-          const balance = ynab.utils.convertMilliUnitsToCurrencyAmount(account.balance);
-          console.log(`  - ${account.name}: $${balance}`);
-        });
-
-        // Get categories
         const categoryGroups = await this.getCategories();
-        console.log(`\n📝 Category Groups (${categoryGroups.length}):`);
-        categoryGroups.forEach(group => {
-          console.log(`  📁 ${group.name}:`);
-          group.categories.forEach(category => {
-            const budgeted = ynab.utils.convertMilliUnitsToCurrencyAmount(category.budgeted);
-            const activity = ynab.utils.convertMilliUnitsToCurrencyAmount(category.activity);
-            const balance = ynab.utils.convertMilliUnitsToCurrencyAmount(category.balance);
-            console.log(`    - ${category.name}: Budgeted: $${budgeted}, Activity: $${activity}, Balance: $${balance}`);
-          });
-        });
+
+        budgetData.budget_details = {
+          id: budgetDetails.id,
+          name: budgetDetails.name,
+          last_modified_on: budgetDetails.last_modified_on,
+          first_month: budgetDetails.first_month,
+          last_month: budgetDetails.last_month,
+          date_format: budgetDetails.date_format,
+          currency_format: budgetDetails.currency_format
+        };
+
+        budgetData.accounts = accounts.map(account => ({
+          id: account.id,
+          name: account.name,
+          type: account.type,
+          on_budget: account.on_budget,
+          closed: account.closed,
+          note: account.note,
+          balance: account.balance,
+          balance_formatted: ynab.utils.convertMilliUnitsToCurrencyAmount(account.balance),
+          cleared_balance: account.cleared_balance,
+          uncleared_balance: account.uncleared_balance,
+          transfer_payee_id: account.transfer_payee_id,
+          direct_import_linked: account.direct_import_linked,
+          direct_import_in_error: account.direct_import_in_error,
+          last_reconciled_at: account.last_reconciled_at
+        }));
+
+        budgetData.category_groups = categoryGroups.map(group => ({
+          id: group.id,
+          name: group.name,
+          hidden: group.hidden,
+          deleted: group.deleted,
+          categories: group.categories.map(category => ({
+            id: category.id,
+            category_group_id: category.category_group_id,
+            name: category.name,
+            hidden: category.hidden,
+            original_category_group_id: category.original_category_group_id,
+            note: category.note,
+            budgeted: category.budgeted,
+            budgeted_formatted: ynab.utils.convertMilliUnitsToCurrencyAmount(category.budgeted),
+            activity: category.activity,
+            activity_formatted: ynab.utils.convertMilliUnitsToCurrencyAmount(category.activity),
+            balance: category.balance,
+            balance_formatted: ynab.utils.convertMilliUnitsToCurrencyAmount(category.balance),
+            goal_type: category.goal_type,
+            goal_day: category.goal_day,
+            goal_cadence: category.goal_cadence,
+            goal_cadence_frequency: category.goal_cadence_frequency,
+            goal_creation_month: category.goal_creation_month,
+            goal_target: category.goal_target,
+            goal_target_month: category.goal_target_month,
+            goal_percentage_complete: category.goal_percentage_complete,
+            goal_months_to_budget: category.goal_months_to_budget,
+            goal_under_funded: category.goal_under_funded,
+            goal_overall_funded: category.goal_overall_funded,
+            goal_overall_left: category.goal_overall_left,
+            deleted: category.deleted
+          }))
+        }));
+      } else if (budgets.length > 0) {
+        // If no specific budget ID, use the first budget
+        console.log(`💰 No specific budget ID set, using first budget: ${budgets[0].name}`);
+        this.budgetId = budgets[0].id;
+        
+        const budgetDetails = await this.getBudgetDetails();
+        const accounts = await this.getAccounts();
+        const categoryGroups = await this.getCategories();
+
+        budgetData.budget_details = {
+          id: budgetDetails.id,
+          name: budgetDetails.name,
+          last_modified_on: budgetDetails.last_modified_on,
+          first_month: budgetDetails.first_month,
+          last_month: budgetDetails.last_month,
+          date_format: budgetDetails.date_format,
+          currency_format: budgetDetails.currency_format
+        };
+
+        budgetData.accounts = accounts.map(account => ({
+          id: account.id,
+          name: account.name,
+          type: account.type,
+          on_budget: account.on_budget,
+          closed: account.closed,
+          note: account.note,
+          balance: account.balance,
+          balance_formatted: ynab.utils.convertMilliUnitsToCurrencyAmount(account.balance),
+          cleared_balance: account.cleared_balance,
+          uncleared_balance: account.uncleared_balance,
+          transfer_payee_id: account.transfer_payee_id,
+          direct_import_linked: account.direct_import_linked,
+          direct_import_in_error: account.direct_import_in_error,
+          last_reconciled_at: account.last_reconciled_at
+        }));
+
+        budgetData.category_groups = categoryGroups.map(group => ({
+          id: group.id,
+          name: group.name,
+          hidden: group.hidden,
+          deleted: group.deleted,
+          categories: group.categories.map(category => ({
+            id: category.id,
+            category_group_id: category.category_group_id,
+            name: category.name,
+            hidden: category.hidden,
+            original_category_group_id: category.original_category_group_id,
+            note: category.note,
+            budgeted: category.budgeted,
+            budgeted_formatted: ynab.utils.convertMilliUnitsToCurrencyAmount(category.budgeted),
+            activity: category.activity,
+            activity_formatted: ynab.utils.convertMilliUnitsToCurrencyAmount(category.activity),
+            balance: category.balance,
+            balance_formatted: ynab.utils.convertMilliUnitsToCurrencyAmount(category.balance),
+            goal_type: category.goal_type,
+            goal_day: category.goal_day,
+            goal_cadence: category.goal_cadence,
+            goal_cadence_frequency: category.goal_cadence_frequency,
+            goal_creation_month: category.goal_creation_month,
+            goal_target: category.goal_target,
+            goal_target_month: category.goal_target_month,
+            goal_percentage_complete: category.goal_percentage_complete,
+            goal_months_to_budget: category.goal_months_to_budget,
+            goal_under_funded: category.goal_under_funded,
+            goal_overall_funded: category.goal_overall_funded,
+            goal_overall_left: category.goal_overall_left,
+            deleted: category.deleted
+          }))
+        }));
       }
+
+      // Create output directory if it doesn't exist
+      const outputDir = path.join(process.cwd(), 'output');
+      if (!fs.existsSync(outputDir)) {
+        fs.mkdirSync(outputDir, { recursive: true });
+      }
+
+      // Generate filename with timestamp
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const filename = `ynab-budget-summary-${timestamp}.json`;
+      const filepath = path.join(outputDir, filename);
+
+      // Write to file
+      fs.writeFileSync(filepath, JSON.stringify(budgetData, null, 2), 'utf8');
+      
+      console.log(`✅ Budget summary saved to: ${filepath}`);
+      console.log(`📊 Data includes:`);
+      console.log(`   - ${budgetData.budgets.length} budget(s)`);
+      if (budgetData.accounts) {
+        console.log(`   - ${budgetData.accounts.length} account(s)`);
+      }
+      if (budgetData.category_groups) {
+        const totalCategories = budgetData.category_groups.reduce((sum: number, group: any) => sum + group.categories.length, 0);
+        console.log(`   - ${budgetData.category_groups.length} category group(s)`);
+        console.log(`   - ${totalCategories} categories`);
+      }
+      
     } catch (error) {
       console.error('❌ Error in budget summary:', error);
     }
