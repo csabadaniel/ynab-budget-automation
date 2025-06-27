@@ -1,0 +1,27 @@
+{
+  "name": "ynab-budget-automation",
+  "version": "1.0.0",
+  "description": "YNAB budget automation tool built with TypeScript",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "ts-node src/index.ts",
+    "watch": "tsc --watch",
+    "clean": "rm -rf dist",
+    "lint": "echo 'Linting not configured yet'",
+    "test": "echo 'Tests not configured yet'"
+  },
+  "keywords": ["ynab", "budget", "automation", "typescript"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "ynab": "^2.9.0",
+    "dotenv": "^16.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0",
+    "ts-node": "^10.0.0"
+  }
+}
